@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use hyper::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use hyper::{Body, Client, Request, Uri};
 use hyper_tls::HttpsConnector;
+use log::debug;
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use serde::{Deserialize, Serialize};
@@ -81,7 +82,7 @@ async fn completion(chat: &mut Chat) -> Result<(), Box<dyn std::error::Error>> {
 
     let content = chat_completion.choices[0].message.content.clone();
 
-    println!("ChatGPT created test case:\n{}", content);
+    debug!("ChatGPT created test case:\n{}", content);
 
     chat.messages.push(ChatMessage {
         role: "assistant".to_string(),
