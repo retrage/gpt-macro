@@ -39,13 +39,23 @@ impl Parse for Args {
 /// fn div_u32(a: u32, b: u32) -> u32 {
 ///    a / b
 /// }
+///
+/// #[auto_test]
+/// fn collaz(n: u32) -> u32 {
+///     if n % 2 == 0 {
+///         n / 2
+///     } else {
+///         3 * n + 1
+///     }
+/// }
 /// ```
 #[proc_macro_attribute]
 pub fn auto_test(args: TokenStream, input: TokenStream) -> TokenStream {
     // Parse the list of test function names that should be generated.
     let args = parse_macro_input!(args as Args);
 
-    let output = chatgpt::generate_tests(input, args.test_names).unwrap();
-
-    output
+    match chatgpt::generate_tests(input, args.test_names) {
+        Ok(output) => output,
+        Err(e) => panic!("{}", e),
+    }
 }

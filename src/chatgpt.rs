@@ -13,7 +13,8 @@ use log::debug;
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use serde::{Deserialize, Serialize};
-use syn::{parse_str, Ident, ItemFn};
+use syn::{parse_str, Ident, ItemFn, ItemMod};
+use tokio::runtime::Runtime;
 
 #[derive(Deserialize, Serialize, Debug)]
 struct ChatMessage {
@@ -92,6 +93,81 @@ async fn completion(chat: &mut Chat) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn init_chat_messages(chat: &mut Chat, input: TokenStream) {
+    chat.messages.push(ChatMessage {
+        role: "system".to_string(),
+        content: "You are a Rust expert that can generate perfect tests for the given function."
+            .to_string(),
+    });
+    chat.messages.push(ChatMessage {
+        role: "user".to_string(),
+        content: format!("Read this Rust function:\n```rust\n{}\n```", input),
+    });
+}
+
+fn generate_test_from(
+    chat: &mut Chat,
+    output: &mut proc_macro2::TokenStream,
+    prompt: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let rt = Runtime::new()?;
+
+    chat.messages.push(ChatMessage {
+        role: "user".to_string(),
+        content: prompt,
+    });
+
+    rt.block_on(completion(chat))?;
+
+    let test_text = chat.messages[chat.messages.len() - 1].content.clone();
+    // Remove the code block and remaining explanation text.
+    // Extract the test case in the code block. Other parts are removed.
+    let test_text = test_text
+        .split("```rust")
+        .nth(1)
+        .ok_or(format!("No code block start found: {}", test_text))?
+        .split("```")
+        .next()
+        .ok_or(format!("No code block end found: {}", test_text))?
+        .trim()
+        .to_string();
+
+    let expanded = if let Ok(test_case) = parse_str::<ItemFn>(&test_text) {
+        quote! {
+            #test_case
+        }
+    } else if let Ok(test_case) = parse_str::<ItemMod>(&test_text) {
+        quote! {
+            #test_case
+        }
+    } else {
+        return Err(format!(
+            "Failed to parse the test case as a function or a module:\n{}\n",
+            test_text
+        )
+        .into());
+    };
+
+    expanded.to_tokens(output);
+
+    Ok(())
+}
+
+fn generate_test_from_test_name(
+    chat: &mut Chat,
+    output: &mut proc_macro2::TokenStream,
+    test_name: Ident,
+) -> Result<(), Box<dyn std::error::Error>> {
+    generate_test_from(chat, output, format!("Write a test case `{}` for the function in Markdown code snippet style. Your response must start with code block '```rust'.", test_name))
+}
+
+fn generate_test_without_test_name(
+    chat: &mut Chat,
+    output: &mut proc_macro2::TokenStream,
+) -> Result<(), Box<dyn std::error::Error>> {
+    generate_test_from(chat, output, "Write a test case for the function as much as possible in Markdown code snippet style. Your response must start with code block '```rust'.".to_string())
+}
+
 pub fn generate_tests(
     input: TokenStream,
     test_names: HashSet<Ident>,
@@ -103,44 +179,14 @@ pub fn generate_tests(
         messages: vec![],
     };
 
-    chat.messages.push(ChatMessage {
-        role: "system".to_string(),
-        content: "You are a Rust expert that can generate perfect tests for the given function."
-            .to_string(),
-    });
-    chat.messages.push(ChatMessage {
-        role: "user".to_string(),
-        content: format!("Read this Rust function:\n```rust\n{}\n```", input),
-    });
+    init_chat_messages(&mut chat, input);
 
-    let rt = tokio::runtime::Runtime::new()?;
-    for test_name in test_names {
-        chat.messages.push(ChatMessage {
-            role: "user".to_string(),
-            content: format!("Write a test case `{}` for the function in Markdown code snippet style. Your response must start with code block '```rust'.", test_name),
-        });
-
-        rt.block_on(completion(&mut chat))?;
-
-        let test_text = chat.messages[chat.messages.len() - 1].content.clone();
-        // Remove the code block and remaining explanation text.
-        // Extract the test case in the code block. Other parts are removed.
-        let test_text = test_text
-            .split("```rust")
-            .nth(1)
-            .unwrap()
-            .split("```")
-            .next()
-            .unwrap()
-            .trim()
-            .to_string();
-        let test_case = parse_str::<ItemFn>(&test_text)?;
-
-        let expanded = quote! {
-            #test_case
-        };
-
-        expanded.to_tokens(&mut output);
+    if test_names.is_empty() {
+        generate_test_without_test_name(&mut chat, &mut output)?;
+    } else {
+        for test_name in test_names {
+            generate_test_from_test_name(&mut chat, &mut output, test_name)?;
+        }
     }
 
     Ok(TokenStream::from(output))
