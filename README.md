@@ -7,9 +7,9 @@ ChatGPT powered Rust macro that automatically generates test cases for given fun
 See this example:
 
 ```rust
-use gpt_auto_test::gpt_auto_test;
+use gpt_auto_test::auto_test;
 
-#[gpt_auto_test(test_valid, test_div_by_zero)]
+#[auto_test(test_valid, test_div_by_zero)]
 fn div_u32(a: u32, b: u32) -> u32 {
     if b == 0 {
         panic!("attempt to divide by zero");

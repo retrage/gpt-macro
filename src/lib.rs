@@ -33,15 +33,15 @@ impl Parse for Args {
 /// # Example
 ///
 /// ```
-/// use r#gpt_auto_test::gpt_auto_test;
+/// use r#gpt_auto_test::auto_test;
 ///
-/// #[gpt_auto_test(test_valid, test_div_by_zero)]
+/// #[auto_test(test_valid, test_div_by_zero)]
 /// fn div_u32(a: u32, b: u32) -> u32 {
 ///    a / b
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn gpt_auto_test(args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn auto_test(args: TokenStream, input: TokenStream) -> TokenStream {
     // Parse the list of test function names that should be generated.
     let args = parse_macro_input!(args as Args);
 
