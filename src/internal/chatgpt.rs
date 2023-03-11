@@ -83,7 +83,7 @@ async fn completion(chat: &mut Chat) -> Result<(), Box<dyn std::error::Error>> {
 
     let content = chat_completion.choices[0].message.content.clone();
 
-    debug!("ChatGPT created test case:\n{}", content);
+    println!("Response from ChatGPT:\n{}", content);
 
     chat.messages.push(ChatMessage {
         role: "assistant".to_string(),
@@ -93,15 +93,27 @@ async fn completion(chat: &mut Chat) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn init_chat_messages(chat: &mut Chat, input: TokenStream) {
+fn extract_code(chat: &mut Chat) -> Result<String, Box<dyn std::error::Error>> {
+    let last_content = chat.messages[chat.messages.len() - 1].content.clone();
+    // Remove the code block and remaining explanation text.
+    // Extract the test case in the code block. Other parts are removed.
+    let code_block = last_content
+        .split("```rust")
+        .nth(1)
+        .ok_or(format!("No code block start found: {}", last_content))?
+        .split("```")
+        .next()
+        .ok_or(format!("No code block end found: {}", last_content))?
+        .trim()
+        .to_string();
+
+    Ok(code_block)
+}
+
+fn init_chat_messages(chat: &mut Chat, init_prompt: String) {
     chat.messages.push(ChatMessage {
         role: "system".to_string(),
-        content: "You are a Rust expert that can generate perfect tests for the given function."
-            .to_string(),
-    });
-    chat.messages.push(ChatMessage {
-        role: "user".to_string(),
-        content: format!("Read this Rust function:\n```rust\n{}\n```", input),
+        content: init_prompt,
     });
 }
 
@@ -119,18 +131,7 @@ fn generate_test_from(
 
     rt.block_on(completion(chat))?;
 
-    let test_text = chat.messages[chat.messages.len() - 1].content.clone();
-    // Remove the code block and remaining explanation text.
-    // Extract the test case in the code block. Other parts are removed.
-    let test_text = test_text
-        .split("```rust")
-        .nth(1)
-        .ok_or(format!("No code block start found: {}", test_text))?
-        .split("```")
-        .next()
-        .ok_or(format!("No code block end found: {}", test_text))?
-        .trim()
-        .to_string();
+    let test_text = extract_code(chat)?;
 
     let expanded = if let Ok(test_case) = parse_str::<ItemFn>(&test_text) {
         quote! {
@@ -151,6 +152,28 @@ fn generate_test_from(
     expanded.to_tokens(output);
 
     Ok(())
+}
+
+fn generate_impl_from(chat: &mut Chat) -> Result<TokenStream, Box<dyn std::error::Error>> {
+    let rt = Runtime::new()?;
+
+    rt.block_on(completion(chat))?;
+
+    let impl_text = extract_code(chat)?;
+
+    let expanded = if let Ok(code) = parse_str::<proc_macro2::TokenStream>(&impl_text) {
+        quote! {
+            #code
+        }
+    } else {
+        return Err(format!(
+            "Failed to parse the response as Rust code:\n{}\n",
+            impl_text
+        )
+        .into());
+    };
+
+    Ok(TokenStream::from(expanded))
 }
 
 fn generate_test_from_test_name(
@@ -179,7 +202,13 @@ pub fn generate_tests(
         messages: vec![],
     };
 
-    init_chat_messages(&mut chat, input);
+    let init_prompt =
+        "You are a Rust expert who can generate perfect tests for the given function.";
+    init_chat_messages(&mut chat, init_prompt.to_string());
+    chat.messages.push(ChatMessage {
+        role: "user".to_string(),
+        content: format!("Read this Rust function:\n```rust\n{}\n```", input),
+    });
 
     if test_names.is_empty() {
         generate_test_without_test_name(&mut chat, &mut output)?;
@@ -190,4 +219,26 @@ pub fn generate_tests(
     }
 
     Ok(TokenStream::from(output))
+}
+
+pub fn generate_impl(
+    doc: String,
+    token: proc_macro2::TokenStream,
+) -> Result<TokenStream, Box<dyn std::error::Error>> {
+    let mut chat = Chat {
+        model: "gpt-3.5-turbo".to_string(),
+        messages: vec![],
+    };
+
+    let init_prompt = "You are a Rust expert who can implement the given function.";
+    init_chat_messages(&mut chat, init_prompt.to_string());
+    chat.messages.push(ChatMessage {
+        role: "user".to_string(),
+        content: format!("Read this incomplete Rust code:\n```rust\n{}\n```", token),
+    });
+    chat.messages.push(ChatMessage { role: "user".to_string(), content: format!("Complete the Rust code that follows this instruction: '{}'. Your response must start with code block '```rust'.", doc) });
+
+    let output = generate_impl_from(&mut chat)?;
+
+    Ok(output)
 }

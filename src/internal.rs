@@ -3,4 +3,5 @@
 
 mod chatgpt;
 
+pub mod auto_impl;
 pub mod auto_test;
