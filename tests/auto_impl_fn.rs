@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Akira Moroo <retrage01@gmail.com> 2023
 
-use gpt_auto_test::auto_impl;
+use gpt_macro::auto_impl;
 
 auto_impl! {
     "Return fizz if the number is divisible by 3, buzz if the number is divisible by 5, and fizzbuzz if the number is divisible by both 3 and 5."

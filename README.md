@@ -1,4 +1,4 @@
-# gpt-auto-test
+# gpt-macro
 
 ChatGPT powered Rust proc macro that generates code at compile-time.
 
@@ -27,7 +27,7 @@ where `$STR_LIT` is a prompt string literal, and `$TOKEN_STREAM` is target code.
 Example:
 
 ```rust
-use gpt_auto_test::auto_impl;
+use gpt_macro::auto_impl;
 
 auto_impl! {
     "Return fizz if the number is divisible by 3, buzz if the number is divisible by 5, and fizzbuzz if the number is divisible by both 3 and 5."
@@ -75,7 +75,7 @@ fn test_fizzbuzz() {
 See this example:
 
 ```rust
-use gpt_auto_test::auto_test;
+use gpt_macro::auto_test;
 
 #[auto_test(test_valid, test_div_by_zero)]
 fn div_u32(a: u32, b: u32) -> u32 {
@@ -88,4 +88,4 @@ fn div_u32(a: u32, b: u32) -> u32 {
 
 ## License
 
-gpt-auto-test is released under the MIT license.
+gpt-macro is released under the MIT license.

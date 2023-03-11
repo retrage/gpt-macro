@@ -12,7 +12,7 @@ mod internal;
 /// # Example
 ///
 /// ```
-/// use r#gpt_auto_test::auto_test;
+/// use r#gpt_macro::auto_test;
 ///
 /// #[auto_test(test_valid, test_div_by_zero)]
 /// fn div_u32(a: u32, b: u32) -> u32 {
@@ -38,7 +38,7 @@ pub fn auto_test(args: TokenStream, input: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```
-/// use r#gpt_auto_test::auto_impl;
+/// use r#gpt_macro::auto_impl;
 ///
 /// auto_impl! {
 ///     "Return fizz if the number is divisible by 3, buzz if the number is divisible by 5, and fizzbuzz if the number is divisible by both 3 and 5."
