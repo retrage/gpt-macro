@@ -32,8 +32,8 @@ pub fn auto_test_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     // Parse the list of test function names that should be generated.
     let args = parse_macro_input!(args as Args);
 
-    match chatgpt::generate_tests(input, args.test_names) {
-        Ok(output) => output,
-        Err(e) => panic!("{}", e),
-    }
+    chatgpt::AutoTest::<chatgpt::ChatGPT>::new(input.into())
+        .completion(args.test_names)
+        .unwrap_or_else(|e| panic!("{}", e))
+        .into()
 }

@@ -32,8 +32,9 @@ impl Parse for AutoImpl {
 
 pub fn auto_impl_impl(input: TokenStream) -> TokenStream {
     let AutoImpl { doc, token } = parse_macro_input!(input as AutoImpl);
-    match chatgpt::generate_impl(doc, token) {
-        Ok(output) => output,
-        Err(e) => panic!("{}", e),
-    }
+
+    chatgpt::AutoImpl::<chatgpt::ChatGPT>::new(token, doc)
+        .completion()
+        .unwrap_or_else(|e| panic!("{}", e))
+        .into()
 }
