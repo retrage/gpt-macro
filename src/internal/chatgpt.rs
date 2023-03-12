@@ -4,16 +4,13 @@
 // Ask ChatGPT to generate cases for the given function.
 // Use hyper to send a POST request to the ChatGPT API.
 
-use std::collections::HashSet;
-
 use hyper::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use hyper::{Body, Client, Request, Uri};
 use hyper_tls::HttpsConnector;
-use proc_macro::TokenStream;
-use quote::{quote, ToTokens};
 use serde::{Deserialize, Serialize};
-use syn::{parse_str, Ident, ItemFn, ItemMod};
 use tokio::runtime::Runtime;
+
+use crate::internal::completion::CodeCompletion;
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -77,7 +74,7 @@ impl ChatGPT {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
 
-        let body = Body::from(serde_json::to_string(&mut self.chat)?);
+        let body = Body::from(serde_json::to_string(&self.chat)?);
 
         let mut request = Request::new(body);
 
@@ -128,136 +125,6 @@ impl ChatGPT {
     }
 }
 
-pub struct AutoImpl<C: CodeCompletion> {
-    token_stream: proc_macro2::TokenStream,
-    doc: String,
-    code_completion: C,
-}
-
-impl<C: CodeCompletion> AutoImpl<C> {
-    pub fn new(token_stream: proc_macro2::TokenStream, doc: String) -> Self {
-        Self {
-            token_stream,
-            doc,
-            code_completion: C::new(),
-        }
-    }
-
-    pub fn completion(&mut self) -> Result<TokenStream, Box<dyn std::error::Error>> {
-        let init_prompt = "You are a Rust expert who can implement the given function.";
-        self.code_completion.init(init_prompt.to_string());
-        self.code_completion.add_context(format!(
-            "Read this incomplete Rust code:\n```rust\n{}\n```",
-            self.token_stream
-        ));
-        self.code_completion.add_context(format!(
-            "Complete the Rust code that follows this instruction: '{}'. Your response must start with code block '```rust'.",
-            self.doc
-        ));
-
-        let code_text = self.code_completion.code_completion()?;
-
-        self.parse_str(&code_text)
-    }
-
-    fn parse_str(&self, s: &str) -> Result<TokenStream, Box<dyn std::error::Error>> {
-        let expanded = if let Ok(code) = parse_str::<proc_macro2::TokenStream>(s) {
-            quote! {
-                #code
-            }
-        } else {
-            return Err(format!("Failed to parse the response as Rust code:\n{}\n", s).into());
-        };
-
-        Ok(TokenStream::from(expanded))
-    }
-}
-
-pub struct AutoTest<C: CodeCompletion> {
-    token_stream: proc_macro2::TokenStream,
-    code_completion: C,
-}
-
-impl<C: CodeCompletion> AutoTest<C> {
-    pub fn new(token_stream: proc_macro2::TokenStream) -> Self {
-        Self {
-            token_stream,
-            code_completion: C::new(),
-        }
-    }
-
-    fn do_completion(
-        &mut self,
-        test_name: Option<Ident>,
-    ) -> Result<proc_macro2::TokenStream, Box<dyn std::error::Error>> {
-        let prompt = if let Some(test_name) = test_name {
-            format!(
-                "Write a test case `{}` for the function in Markdown code snippet style. Your response must start with code block '```rust'.",
-                test_name
-            )
-        } else {
-            "Write a test case for the function as much as possible in Markdown code snippet style. Your response must start with code block '```rust'.".to_string()
-        };
-        self.code_completion.add_context(prompt);
-
-        let test_text = self.code_completion.code_completion()?;
-
-        self.parse_str(&test_text)
-    }
-
-    pub fn completion(
-        &mut self,
-        test_names: HashSet<Ident>,
-    ) -> Result<TokenStream, Box<dyn std::error::Error>> {
-        let mut output = self.token_stream.clone();
-
-        let init_prompt =
-            "You are a Rust expert who can generate perfect tests for the given function.";
-        self.code_completion.init(init_prompt.to_string());
-        self.code_completion.add_context(format!(
-            "Read this Rust function:\n```rust\n{}\n```",
-            self.token_stream,
-        ));
-
-        if test_names.is_empty() {
-            self.do_completion(None)?.to_tokens(&mut output);
-        } else {
-            for test_name in test_names {
-                self.do_completion(Some(test_name))?.to_tokens(&mut output);
-            }
-        }
-
-        Ok(TokenStream::from(output))
-    }
-
-    fn parse_str(&self, s: &str) -> Result<proc_macro2::TokenStream, Box<dyn std::error::Error>> {
-        let expanded = if let Ok(test_case) = parse_str::<ItemFn>(&s) {
-            quote! {
-                #test_case
-            }
-        } else if let Ok(test_case) = parse_str::<ItemMod>(&s) {
-            quote! {
-                #test_case
-            }
-        } else {
-            return Err(format!(
-                "Failed to parse the test case as a function or a module:\n{}\n",
-                s
-            )
-            .into());
-        };
-
-        Ok(expanded)
-    }
-}
-
-pub trait CodeCompletion {
-    fn new() -> Self;
-    fn init(&mut self, init_prompt: String);
-    fn add_context(&mut self, context: String);
-    fn code_completion(&mut self) -> Result<String, Box<dyn std::error::Error>>;
-}
-
 impl CodeCompletion for ChatGPT {
     fn new() -> Self {
         Self {
@@ -281,6 +148,6 @@ impl CodeCompletion for ChatGPT {
 
         rt.block_on(self.completion())?;
 
-        Ok(self.extract_code()?)
+        self.extract_code()
     }
 }
