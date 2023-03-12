@@ -6,10 +6,10 @@ use quote::{quote, ToTokens};
 use std::collections::HashSet;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, parse_str, Ident, ItemFn, ItemMod, Token,
+    parse_macro_input, parse_str, Ident, Token,
 };
 
-use crate::internal::{chatgpt::ChatGPT, completion::CodeCompletion};
+use crate::internal::completion::CodeCompletion;
 
 /// Parses a list of test function names separated by commas.
 ///
@@ -42,25 +42,6 @@ impl<C: CodeCompletion> AutoTest<C> {
         }
     }
 
-    fn do_completion(
-        &mut self,
-        test_name: Option<Ident>,
-    ) -> Result<proc_macro2::TokenStream, Box<dyn std::error::Error>> {
-        let prompt = if let Some(test_name) = test_name {
-            format!(
-                "Write a test case `{}` for the function in Markdown code snippet style. Your response must start with code block '```rust'.",
-                test_name
-            )
-        } else {
-            "Write a test case for the function as much as possible in Markdown code snippet style. Your response must start with code block '```rust'.".to_string()
-        };
-        self.code_completion.add_context(prompt);
-
-        let test_text = self.code_completion.code_completion()?;
-
-        self.parse_str(&test_text)
-    }
-
     pub fn completion(&mut self, args: Args) -> Result<TokenStream, Box<dyn std::error::Error>> {
         let mut output = self.token_stream.clone();
 
@@ -73,31 +54,35 @@ impl<C: CodeCompletion> AutoTest<C> {
         ));
 
         if args.test_names.is_empty() {
-            self.do_completion(None)?.to_tokens(&mut output);
+            self.code_completion.add_context(
+                "Write a test case for the function as much as possible in Markdown code snippet style. Your response must start with code block '```rust'.".to_string()
+            );
         } else {
             for test_name in args.test_names {
-                self.do_completion(Some(test_name))?.to_tokens(&mut output);
+                self.code_completion.add_context(
+                    format!(
+                        "Write a test case `{}` for the function in Markdown code snippet style. Your response must start with code block '```rust'.",
+                        test_name
+                    )
+                );
             }
         }
+
+        let test_text = self.code_completion.code_completion()?;
+
+        let test_case = self.parse_str(&test_text)?;
+        test_case.to_tokens(&mut output);
 
         Ok(TokenStream::from(output))
     }
 
     fn parse_str(&self, s: &str) -> Result<proc_macro2::TokenStream, Box<dyn std::error::Error>> {
-        let expanded = if let Ok(test_case) = parse_str::<ItemFn>(s) {
-            quote! {
-                #test_case
-            }
-        } else if let Ok(test_case) = parse_str::<ItemMod>(s) {
+        let expanded = if let Ok(test_case) = parse_str::<proc_macro2::TokenStream>(s) {
             quote! {
                 #test_case
             }
         } else {
-            return Err(format!(
-                "Failed to parse the test case as a function or a module:\n{}\n",
-                s
-            )
-            .into());
+            return Err(format!("Failed to parse the response as Rust code:\n{}\n", s).into());
         };
 
         Ok(expanded)
@@ -108,7 +93,13 @@ pub fn auto_test_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     // Parse the list of test function names that should be generated.
     let args = parse_macro_input!(args as Args);
 
-    AutoTest::<ChatGPT>::new(input.into())
+    #[cfg(not(feature = "davinci"))]
+    type Backend = crate::internal::chatgpt::ChatGPT;
+
+    #[cfg(feature = "davinci")]
+    type Backend = crate::internal::text_completion::TextCompletion;
+
+    AutoTest::<Backend>::new(input.into())
         .completion(args)
         .unwrap_or_else(|e| panic!("{}", e))
 }

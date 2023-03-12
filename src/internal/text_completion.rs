@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Akira Moroo <retrage01@gmail.com> 2023
 
+// Ask GPT-3.5 to complete the given function.
+// Use hyper to send a POST request to the GPT-3.5 API.
+
 use hyper::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use hyper::{Body, Client, Request, Uri};
 use hyper_tls::HttpsConnector;
@@ -10,58 +13,50 @@ use tokio::runtime::Runtime;
 use crate::internal::completion::CodeCompletion;
 
 #[derive(Deserialize, Serialize, Debug)]
-#[serde(rename_all = "lowercase")]
-enum Role {
-    User,
-    System,
-    Assistant,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-struct ChatMessage {
-    role: Role,
-    content: String,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-struct Chat {
+struct CompletionRequest {
     model: String,
-    messages: Vec<ChatMessage>,
+    prompt: String,
+    max_tokens: u32,
+    temperature: f32,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct ChatCompletion {
+struct CompletionResponse {
     id: String,
     object: String,
     created: u64,
-    choices: Vec<ChatChoice>,
-    usage: ChatUsage,
+    model: String,
+    choices: Vec<CompletionChoice>,
+    usage: CompletionUsage,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct ChatChoice {
+struct CompletionChoice {
+    text: String,
     index: u32,
-    message: ChatMessage,
+    logprobs: Option<u32>,
     finish_reason: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct ChatUsage {
+struct CompletionUsage {
     prompt_tokens: u32,
     completion_tokens: u32,
     total_tokens: u32,
 }
 
-pub struct ChatGPT {
-    chat: Chat,
+pub struct TextCompletion {
+    request: CompletionRequest,
+    response: Option<CompletionResponse>,
 }
 
-impl ChatGPT {
-    const URL: &'static str = "https://api.openai.com/v1/chat/completions";
-    const MODEL: &'static str = "gpt-3.5-turbo";
+impl TextCompletion {
+    const URL: &'static str = "https://api.openai.com/v1/completions";
+    const MODEL: &'static str = "text-davinci-003";
 
-    fn add_message(&mut self, role: Role, content: String) {
-        self.chat.messages.push(ChatMessage { role, content });
+    fn add_prompt(&mut self, content: String) {
+        self.request.prompt.push('\n');
+        self.request.prompt.push_str(&content);
     }
 
     async fn completion(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -71,7 +66,7 @@ impl ChatGPT {
         let https = HttpsConnector::new();
         let client = Client::builder().build::<_, hyper::Body>(https);
 
-        let body = Body::from(serde_json::to_string(&self.chat)?);
+        let body = Body::from(serde_json::to_string(&self.request)?);
 
         let mut request = Request::new(body);
 
@@ -91,30 +86,29 @@ impl ChatGPT {
         let body_bytes = hyper::body::to_bytes(response.into_body()).await?;
         let body_str = String::from_utf8(body_bytes.to_vec())?;
 
-        let chat_completion: ChatCompletion = serde_json::from_str(&body_str)?;
+        let response: CompletionResponse = serde_json::from_str(&body_str)?;
 
-        let content = chat_completion.choices[0].message.content.clone();
+        let content = response.choices[0].text.clone();
+        println!("Response from {}:\n{}", self.request.model, content);
 
-        println!("Response from ChatGPT:\n{}", content);
-
-        self.add_message(Role::Assistant, content);
+        self.response = Some(response);
 
         Ok(())
     }
 
     fn extract_code(&self) -> Result<String, Box<dyn std::error::Error>> {
-        let last_content = self.chat.messages[self.chat.messages.len() - 1]
-            .content
+        let content = self.response.as_ref().ok_or("No response")?.choices[0]
+            .text
             .clone();
         // Remove the code block and remaining explanation text.
         // Extract the test case in the code block. Other parts are removed.
-        let code_block = last_content
+        let code_block = content
             .split("```rust")
             .nth(1)
-            .ok_or(format!("No code block start found: {}", last_content))?
+            .ok_or(format!("No code block start found: {}", content))?
             .split("```")
             .next()
-            .ok_or(format!("No code block end found: {}", last_content))?
+            .ok_or(format!("No code block end found: {}", content))?
             .trim()
             .to_string();
 
@@ -122,22 +116,25 @@ impl ChatGPT {
     }
 }
 
-impl CodeCompletion for ChatGPT {
+impl CodeCompletion for TextCompletion {
     fn new() -> Self {
         Self {
-            chat: Chat {
+            request: CompletionRequest {
                 model: Self::MODEL.to_string(),
-                messages: vec![],
+                prompt: String::new(),
+                max_tokens: 1024,
+                temperature: 0.0,
             },
+            response: None,
         }
     }
 
     fn init(&mut self, init_prompt: String) {
-        self.add_message(Role::System, init_prompt);
+        self.add_prompt(init_prompt);
     }
 
     fn add_context(&mut self, context: String) {
-        self.add_message(Role::User, context);
+        self.add_prompt(context)
     }
 
     fn code_completion(&mut self) -> Result<String, Box<dyn std::error::Error>> {

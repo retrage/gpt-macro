@@ -3,6 +3,7 @@
 
 mod chatgpt;
 mod completion;
+mod text_completion;
 
 pub mod auto_impl;
 pub mod auto_test;

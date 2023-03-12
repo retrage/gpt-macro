@@ -8,16 +8,14 @@ use syn::{
     parse_macro_input, parse_str, LitStr,
 };
 
-use crate::internal::{chatgpt::ChatGPT, completion::CodeCompletion};
+use crate::internal::completion::CodeCompletion;
 
 /// Parses the following syntax:
 ///
-/// ```
 /// auto_impl! {
 ///     $STR_LIT
 ///     $TOKEN_STREAM
 /// }
-/// ```
 struct AutoImpl<C: CodeCompletion> {
     doc: String,
     token_stream: proc_macro2::TokenStream,
@@ -68,7 +66,13 @@ impl<C: CodeCompletion> AutoImpl<C> {
 }
 
 pub fn auto_impl_impl(input: TokenStream) -> TokenStream {
-    let mut auto_impl = parse_macro_input!(input as AutoImpl<ChatGPT>);
+    #[cfg(not(feature = "davinci"))]
+    type Backend = crate::internal::chatgpt::ChatGPT;
+
+    #[cfg(feature = "davinci")]
+    type Backend = crate::internal::text_completion::TextCompletion;
+
+    let mut auto_impl = parse_macro_input!(input as AutoImpl<Backend>);
 
     auto_impl.completion().unwrap_or_else(|e| panic!("{}", e))
 }
