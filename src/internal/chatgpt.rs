@@ -17,8 +17,16 @@ use syn::{parse_str, Ident, ItemFn, ItemMod};
 use tokio::runtime::Runtime;
 
 #[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "lowercase")]
+enum Role {
+    User,
+    System,
+    Assistant,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
 struct ChatMessage {
-    role: String,
+    role: Role,
     content: String,
 }
 
@@ -86,7 +94,7 @@ async fn completion(chat: &mut Chat) -> Result<(), Box<dyn std::error::Error>> {
     println!("Response from ChatGPT:\n{}", content);
 
     chat.messages.push(ChatMessage {
-        role: "assistant".to_string(),
+        role: Role::Assistant,
         content,
     });
 
@@ -112,7 +120,7 @@ fn extract_code(chat: &mut Chat) -> Result<String, Box<dyn std::error::Error>> {
 
 fn init_chat_messages(chat: &mut Chat, init_prompt: String) {
     chat.messages.push(ChatMessage {
-        role: "system".to_string(),
+        role: Role::System,
         content: init_prompt,
     });
 }
@@ -125,7 +133,7 @@ fn generate_test_from(
     let rt = Runtime::new()?;
 
     chat.messages.push(ChatMessage {
-        role: "user".to_string(),
+        role: Role::User,
         content: prompt,
     });
 
@@ -206,7 +214,7 @@ pub fn generate_tests(
         "You are a Rust expert who can generate perfect tests for the given function.";
     init_chat_messages(&mut chat, init_prompt.to_string());
     chat.messages.push(ChatMessage {
-        role: "user".to_string(),
+        role: Role::User,
         content: format!("Read this Rust function:\n```rust\n{}\n```", input),
     });
 
@@ -233,10 +241,10 @@ pub fn generate_impl(
     let init_prompt = "You are a Rust expert who can implement the given function.";
     init_chat_messages(&mut chat, init_prompt.to_string());
     chat.messages.push(ChatMessage {
-        role: "user".to_string(),
+        role: Role::User,
         content: format!("Read this incomplete Rust code:\n```rust\n{}\n```", token),
     });
-    chat.messages.push(ChatMessage { role: "user".to_string(), content: format!("Complete the Rust code that follows this instruction: '{}'. Your response must start with code block '```rust'.", doc) });
+    chat.messages.push(ChatMessage { role: Role::User, content: format!("Complete the Rust code that follows this instruction: '{}'. Your response must start with code block '```rust'.", doc) });
 
     let output = generate_impl_from(&mut chat)?;
 
