@@ -86,6 +86,11 @@ fn div_u32(a: u32, b: u32) -> u32 {
 }
 ```
 
+## Supported Models
+
+* ChatGPT: `gpt-3.5-turbo` (default)
+* Text Completion: `text-davinci-003` (Specify `davinci` feature to enable it)
+
 ## License
 
 gpt-macro is released under the MIT license.
