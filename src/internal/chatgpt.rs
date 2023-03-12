@@ -9,7 +9,6 @@ use std::collections::HashSet;
 use hyper::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use hyper::{Body, Client, Request, Uri};
 use hyper_tls::HttpsConnector;
-use log::debug;
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use serde::{Deserialize, Serialize};
