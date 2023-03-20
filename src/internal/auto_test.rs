@@ -22,7 +22,7 @@ struct Args {
 
 impl Parse for Args {
     fn parse(input: ParseStream) -> syn::parse::Result<Self> {
-        let test_names = input.parse_terminated::<Ident, Token![,]>(Ident::parse)?;
+        let test_names = input.parse_terminated(Ident::parse, Token![,])?;
         Ok(Args {
             test_names: test_names.into_iter().collect(),
         })
