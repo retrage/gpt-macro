@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Akira Moroo <retrage01@gmail.com> 2023
 
+use async_openai::{
+    types::{ChatCompletionRequestMessageArgs, CreateChatCompletionRequestArgs, Role},
+    Client,
+};
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, parse_str, LitStr,
 };
+use tokio::runtime::Runtime;
 
-use crate::internal::completion::CodeCompletion;
+use super::utils;
 
 /// Parses the following syntax:
 ///
@@ -16,40 +21,49 @@ use crate::internal::completion::CodeCompletion;
 ///     $STR_LIT
 ///     $TOKEN_STREAM
 /// }
-struct AutoImpl<C: CodeCompletion> {
+struct AutoImpl {
     doc: String,
     token_stream: proc_macro2::TokenStream,
-    code_completion: C,
 }
 
-impl<C: CodeCompletion> Parse for AutoImpl<C> {
+impl Parse for AutoImpl {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let doc = input.parse::<LitStr>()?.value();
         let token_stream = input.parse::<proc_macro2::TokenStream>()?;
-        Ok(AutoImpl {
-            doc,
-            token_stream,
-            code_completion: C::new(),
-        })
+        Ok(AutoImpl { doc, token_stream })
     }
 }
 
-impl<C: CodeCompletion> AutoImpl<C> {
-    fn completion(&mut self) -> Result<TokenStream, Box<dyn std::error::Error>> {
-        let init_prompt = "You are a Rust expert who can implement the given function.";
-        self.code_completion.init(init_prompt.to_string());
-        self.code_completion.add_context(format!(
-            "Read this incomplete Rust code:\n```rust\n{}\n```",
-            self.token_stream
-        ));
-        self.code_completion.add_context(format!(
-            "Complete the Rust code that follows this instruction: '{}'. Your response must start with code block '```rust'.",
-            self.doc
-        ));
+impl AutoImpl {
+    async fn completion(&mut self) -> Result<TokenStream, Box<dyn std::error::Error>> {
+        let request = CreateChatCompletionRequestArgs::default()
+            .model("gpt-3.5-turbo")
+            .messages([
+                ChatCompletionRequestMessageArgs::default()
+                    .role(Role::System)
+                    .content("You are a Rust expert who can implement the given function.")
+                    .build()?,
+                ChatCompletionRequestMessageArgs::default()
+                    .role(Role::User)
+                    .content(format!(
+                        "Read this incomplete Rust code:\n```rust\n{}\n```",
+                        self.token_stream
+                    ))
+                    .build()?,
+                ChatCompletionRequestMessageArgs::default()
+                    .role(Role::User)
+                    .content(format!(
+                        "Complete the Rust code that follows this instruction: '{}'. Your response must start with code block '```rust'.",
+                        self.doc
+                    ))
+                    .build()?,
+            ])
+            .build()?;
 
-        let code_text = self.code_completion.code_completion()?;
+        let client = Client::new();
+        let response = client.chat().create(request).await?;
 
-        self.parse_str(&code_text)
+        self.parse_str(&utils::extract_code(&response)?)
     }
 
     fn parse_str(&self, s: &str) -> Result<TokenStream, Box<dyn std::error::Error>> {
@@ -66,13 +80,9 @@ impl<C: CodeCompletion> AutoImpl<C> {
 }
 
 pub fn auto_impl_impl(input: TokenStream) -> TokenStream {
-    #[cfg(not(feature = "davinci"))]
-    type Backend = crate::internal::chatgpt::ChatGPT;
+    let mut auto_impl = parse_macro_input!(input as AutoImpl);
 
-    #[cfg(feature = "davinci")]
-    type Backend = crate::internal::text_completion::TextCompletion;
-
-    let mut auto_impl = parse_macro_input!(input as AutoImpl<Backend>);
-
-    auto_impl.completion().unwrap_or_else(|e| panic!("{}", e))
+    let rt = Runtime::new().expect("Failed to create a runtime.");
+    rt.block_on(auto_impl.completion())
+        .unwrap_or_else(|e| panic!("{}", e))
 }
