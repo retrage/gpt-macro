@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Akira Moroo <retrage01@gmail.com> 2023
 
+use async_openai::{
+    types::{ChatCompletionRequestMessageArgs, CreateChatCompletionRequestArgs, Role},
+    Client,
+};
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use std::collections::HashSet;
@@ -8,8 +12,9 @@ use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, parse_str, Ident, Token,
 };
+use tokio::runtime::Runtime;
 
-use crate::internal::completion::CodeCompletion;
+use super::utils;
 
 /// Parses a list of test function names separated by commas.
 ///
@@ -29,48 +34,68 @@ impl Parse for Args {
     }
 }
 
-struct AutoTest<C: CodeCompletion> {
+struct AutoTest {
     token_stream: proc_macro2::TokenStream,
-    code_completion: C,
 }
 
-impl<C: CodeCompletion> AutoTest<C> {
-    pub fn new(token_stream: proc_macro2::TokenStream) -> Self {
-        Self {
-            token_stream,
-            code_completion: C::new(),
-        }
+impl AutoTest {
+    fn new(token_stream: proc_macro2::TokenStream) -> Self {
+        Self { token_stream }
     }
 
-    pub fn completion(&mut self, args: Args) -> Result<TokenStream, Box<dyn std::error::Error>> {
+    async fn completion(&mut self, args: Args) -> Result<TokenStream, Box<dyn std::error::Error>> {
         let mut output = self.token_stream.clone();
 
-        let init_prompt =
-            "You are a Rust expert who can generate perfect tests for the given function.";
-        self.code_completion.init(init_prompt.to_string());
-        self.code_completion.add_context(format!(
-            "Read this Rust function:\n```rust\n{}\n```",
-            self.token_stream,
-        ));
+        let mut messages = vec![
+            ChatCompletionRequestMessageArgs::default()
+                .role(Role::System)
+                .content(
+                    "You are a Rust expert who can generate perfect tests for the given function.",
+                )
+                .build()?,
+            ChatCompletionRequestMessageArgs::default()
+                .role(Role::User)
+                .content(format!(
+                    "Read this Rust function:\n```rust\n{}\n```",
+                    self.token_stream
+                ))
+                .build()?,
+        ];
 
         if args.test_names.is_empty() {
-            self.code_completion.add_context(
-                "Write a test case for the function as much as possible in Markdown code snippet style. Your response must start with code block '```rust'.".to_string()
+            messages.push(
+                ChatCompletionRequestMessageArgs::default()
+                    .role(Role::User)
+                    .content(
+                        "Write a test case for the function as much as possible in Markdown code snippet style. Your response must start with code block '```rust'.",
+                    )
+                    .build()?,
             );
         } else {
             for test_name in args.test_names {
-                self.code_completion.add_context(
-                    format!(
-                        "Write a test case `{}` for the function in Markdown code snippet style. Your response must start with code block '```rust'.",
-                        test_name
-                    )
+                messages.push(
+                    ChatCompletionRequestMessageArgs::default()
+                        .role(Role::User)
+                        .content(
+                            format!(
+                                "Write a test case `{}` for the function in Markdown code snippet style. Your response must start with code block '```rust'.",
+                                test_name
+                            )
+                        )
+                        .build()?,
                 );
             }
         }
 
-        let test_text = self.code_completion.code_completion()?;
+        let request = CreateChatCompletionRequestArgs::default()
+            .model("gpt-3.5-turbo")
+            .messages(messages)
+            .build()?;
 
-        let test_case = self.parse_str(&test_text)?;
+        let client = Client::new();
+        let response = client.chat().create(request).await?;
+
+        let test_case = self.parse_str(&utils::extract_code(&response)?)?;
         test_case.to_tokens(&mut output);
 
         Ok(TokenStream::from(output))
@@ -93,13 +118,9 @@ pub fn auto_test_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     // Parse the list of test function names that should be generated.
     let args = parse_macro_input!(args as Args);
 
-    #[cfg(not(feature = "davinci"))]
-    type Backend = crate::internal::chatgpt::ChatGPT;
+    let mut auto_test = AutoTest::new(input.into());
 
-    #[cfg(feature = "davinci")]
-    type Backend = crate::internal::text_completion::TextCompletion;
-
-    AutoTest::<Backend>::new(input.into())
-        .completion(args)
+    let rt = Runtime::new().expect("Failed to create a runtime.");
+    rt.block_on(auto_test.completion(args))
         .unwrap_or_else(|e| panic!("{}", e))
 }

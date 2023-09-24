@@ -12,7 +12,6 @@ path = "tests/tests.rs"
 
 [features]
 default = []
-davinci = []
 
 [dev-dependencies]
 trybuild = { version = "1.0", features = ["diff"] }
@@ -21,8 +20,5 @@ trybuild = { version = "1.0", features = ["diff"] }
 syn = { version = "2.0", features = ["full", "extra-traits", "parsing"] }
 proc-macro2 = { version = "1.0", features = ["nightly"] }
 quote = "1.0"
-hyper = { version = "0.14", features = ["full"] }
-hyper-tls = "0.5"
-tokio = { version = "1.0", features = ["full"] }
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
+async-openai = "0.14.2"
+tokio = { version = "1.0", features = ["rt-multi-thread"] }
