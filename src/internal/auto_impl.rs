@@ -2,7 +2,10 @@
 // Akira Moroo <retrage01@gmail.com> 2023
 
 use async_openai::{
-    types::{ChatCompletionRequestMessageArgs, CreateChatCompletionRequestArgs, Role},
+    types::{
+        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+        CreateChatCompletionRequestArgs,
+    },
     Client,
 };
 use proc_macro::TokenStream;
@@ -39,24 +42,21 @@ impl AutoImpl {
         let request = CreateChatCompletionRequestArgs::default()
             .model("gpt-3.5-turbo")
             .messages([
-                ChatCompletionRequestMessageArgs::default()
-                    .role(Role::System)
+                ChatCompletionRequestSystemMessageArgs::default()
                     .content("You are a Rust expert who can implement the given function.")
-                    .build()?,
-                ChatCompletionRequestMessageArgs::default()
-                    .role(Role::User)
+                    .build()?.into(),
+                ChatCompletionRequestUserMessageArgs::default()
                     .content(format!(
                         "Read this incomplete Rust code:\n```rust\n{}\n```",
                         self.token_stream
                     ))
-                    .build()?,
-                ChatCompletionRequestMessageArgs::default()
-                    .role(Role::User)
+                    .build()?.into(),
+                ChatCompletionRequestUserMessageArgs::default()
                     .content(format!(
                         "Complete the Rust code that follows this instruction: '{}'. Your response must start with code block '```rust'.",
                         self.doc
                     ))
-                    .build()?,
+                    .build()?.into(),
             ])
             .build()?;
 

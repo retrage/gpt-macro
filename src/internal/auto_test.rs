@@ -2,7 +2,10 @@
 // Akira Moroo <retrage01@gmail.com> 2023
 
 use async_openai::{
-    types::{ChatCompletionRequestMessageArgs, CreateChatCompletionRequestArgs, Role},
+    types::{
+        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+        CreateChatCompletionRequestArgs,
+    },
     Client,
 };
 use proc_macro::TokenStream;
@@ -46,43 +49,40 @@ impl AutoTest {
     async fn completion(&mut self, args: Args) -> Result<TokenStream, Box<dyn std::error::Error>> {
         let mut output = self.token_stream.clone();
 
-        let mut messages = vec![
-            ChatCompletionRequestMessageArgs::default()
-                .role(Role::System)
+        let mut messages =
+            vec![
+            ChatCompletionRequestSystemMessageArgs::default()
                 .content(
                     "You are a Rust expert who can generate perfect tests for the given function.",
                 )
-                .build()?,
-            ChatCompletionRequestMessageArgs::default()
-                .role(Role::User)
+                .build()?.into(),
+            ChatCompletionRequestUserMessageArgs::default()
                 .content(format!(
                     "Read this Rust function:\n```rust\n{}\n```",
                     self.token_stream
                 ))
-                .build()?,
+                .build()?.into(),
         ];
 
         if args.test_names.is_empty() {
             messages.push(
-                ChatCompletionRequestMessageArgs::default()
-                    .role(Role::User)
+                ChatCompletionRequestUserMessageArgs::default()
                     .content(
                         "Write a test case for the function as much as possible in Markdown code snippet style. Your response must start with code block '```rust'.",
                     )
-                    .build()?,
+                    .build()?.into(),
             );
         } else {
             for test_name in args.test_names {
                 messages.push(
-                    ChatCompletionRequestMessageArgs::default()
-                        .role(Role::User)
+                    ChatCompletionRequestUserMessageArgs::default()
                         .content(
                             format!(
                                 "Write a test case `{}` for the function in Markdown code snippet style. Your response must start with code block '```rust'.",
                                 test_name
                             )
                         )
-                        .build()?,
+                        .build()?.into(),
                 );
             }
         }
