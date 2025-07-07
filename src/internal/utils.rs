@@ -17,10 +17,10 @@ pub fn extract_code(
     let code_block = content
         .split("```rust")
         .nth(1)
-        .ok_or(format!("No code block start found: {}", content))?
+        .ok_or(format!("No code block start found: {content}"))?
         .split("```")
         .next()
-        .ok_or(format!("No code block end found: {}", content))?
+        .ok_or(format!("No code block end found: {content}"))?
         .trim()
         .to_string();
 

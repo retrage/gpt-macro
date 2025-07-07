@@ -72,7 +72,7 @@ impl AutoImpl {
                 #code
             }
         } else {
-            return Err(format!("Failed to parse the response as Rust code:\n{}\n", s).into());
+            return Err(format!("Failed to parse the response as Rust code:\n{s}\n").into());
         };
 
         Ok(TokenStream::from(expanded))
