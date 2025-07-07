@@ -78,8 +78,7 @@ impl AutoTest {
                     ChatCompletionRequestUserMessageArgs::default()
                         .content(
                             format!(
-                                "Write a test case `{}` for the function in Markdown code snippet style. Your response must start with code block '```rust'.",
-                                test_name
+                                "Write a test case `{test_name}` for the function in Markdown code snippet style. Your response must start with code block '```rust'."
                             )
                         )
                         .build()?.into(),
@@ -107,7 +106,7 @@ impl AutoTest {
                 #test_case
             }
         } else {
-            return Err(format!("Failed to parse the response as Rust code:\n{}\n", s).into());
+            return Err(format!("Failed to parse the response as Rust code:\n{s}\n").into());
         };
 
         Ok(expanded)
