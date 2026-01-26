@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Akira Moroo <retrage01@gmail.com> 2023
 
-use async_openai::types::CreateChatCompletionResponse;
+use async_openai::types::chat::CreateChatCompletionResponse;
 
 pub fn extract_code(
     response: &CreateChatCompletionResponse,
