@@ -2,7 +2,7 @@
 // Akira Moroo <retrage01@gmail.com> 2023
 
 use async_openai::{
-    types::{
+    types::chat::{
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
         CreateChatCompletionRequestArgs,
     },

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Akira Moroo <retrage01@gmail.com> 2023
 
+#![allow(clippy::test_attr_in_doctest)]
+
 use internal::auto_impl::auto_impl_impl;
 use internal::auto_test::auto_test_impl;
 use proc_macro::TokenStream;
