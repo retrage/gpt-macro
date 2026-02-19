@@ -45,7 +45,6 @@ pub fn auto_test(args: TokenStream, input: TokenStream) -> TokenStream {
 ///     fn fizzbuzz(n: u32) -> String {
 ///     }
 ///
-///     #[test]
 ///     fn test_fizzbuzz() {
 ///         assert_eq!(fizzbuzz(3), "fizz");
 ///         assert_eq!(fizzbuzz(5), "buzz");
