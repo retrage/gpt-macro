@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Akira Moroo <retrage01@gmail.com> 2023
 
+#![allow(clippy::test_attr_in_doctest)]
+
 use internal::auto_impl::auto_impl_impl;
 use internal::auto_test::auto_test_impl;
 use proc_macro::TokenStream;
@@ -45,6 +47,7 @@ pub fn auto_test(args: TokenStream, input: TokenStream) -> TokenStream {
 ///     fn fizzbuzz(n: u32) -> String {
 ///     }
 ///
+///     #[test]
 ///     fn test_fizzbuzz() {
 ///         assert_eq!(fizzbuzz(3), "fizz");
 ///         assert_eq!(fizzbuzz(5), "buzz");
