@@ -10,7 +10,7 @@ use async_openai::{
 };
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use std::collections::HashSet;
+use std::{collections::HashSet, fmt::Write};
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, parse_str, Ident, Token,
@@ -49,46 +49,38 @@ impl AutoTest {
     async fn completion(&mut self, args: Args) -> Result<TokenStream, Box<dyn std::error::Error>> {
         let mut output = self.token_stream.clone();
 
-        let mut messages =
-            vec![
-            ChatCompletionRequestSystemMessageArgs::default()
-                .content(
-                    "You are a Rust expert who can generate perfect tests for the given function.",
-                )
-                .build()?.into(),
-            ChatCompletionRequestUserMessageArgs::default()
-                .content(format!(
-                    "Read this Rust function:\n```rust\n{}\n```",
-                    self.token_stream
-                ))
-                .build()?.into(),
-        ];
-
+        let mut instructions = String::from(
+            "Generate Rust test function(s) for the function below. Return only the generated test source in the code field. Do not include Markdown code fences in that field.",
+        );
         if args.test_names.is_empty() {
-            messages.push(
-                ChatCompletionRequestUserMessageArgs::default()
-                    .content(
-                        "Write a test case for the function as much as possible in Markdown code snippet style. Your response must start with code block '```rust'.",
-                    )
-                    .build()?.into(),
-            );
+            instructions.push_str(" Choose appropriate test function names.");
         } else {
-            for test_name in args.test_names {
-                messages.push(
-                    ChatCompletionRequestUserMessageArgs::default()
-                        .content(
-                            format!(
-                                "Write a test case `{test_name}` for the function in Markdown code snippet style. Your response must start with code block '```rust'."
-                            )
-                        )
-                        .build()?.into(),
-                );
-            }
+            instructions.push_str(" Generate exactly these test function names: ");
+            let mut test_names = args
+                .test_names
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>();
+            test_names.sort();
+            let _ = write!(instructions, "{}", test_names.join(", "));
         }
 
         let request = CreateChatCompletionRequestArgs::default()
-            .model("gpt-3.5-turbo")
-            .messages(messages)
+            .model(utils::MODEL)
+            .response_format(utils::structured_output_format())
+            .messages([
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content("You are a Rust expert who writes useful, compiling tests.")
+                    .build()?
+                    .into(),
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content(format!(
+                        "{}\n\nFunction source:\n{}",
+                        instructions, self.token_stream
+                    ))
+                    .build()?
+                    .into(),
+            ])
             .build()?;
 
         let client = Client::new();

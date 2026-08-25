@@ -40,21 +40,16 @@ impl Parse for AutoImpl {
 impl AutoImpl {
     async fn completion(&mut self) -> Result<TokenStream, Box<dyn std::error::Error>> {
         let request = CreateChatCompletionRequestArgs::default()
-            .model("gpt-3.5-turbo")
+            .model(utils::MODEL)
+            .response_format(utils::structured_output_format())
             .messages([
                 ChatCompletionRequestSystemMessageArgs::default()
-                    .content("You are a Rust expert who can implement the given function.")
+                    .content("You are a Rust expert who implements the requested function.")
                     .build()?.into(),
                 ChatCompletionRequestUserMessageArgs::default()
                     .content(format!(
-                        "Read this incomplete Rust code:\n```rust\n{}\n```",
-                        self.token_stream
-                    ))
-                    .build()?.into(),
-                ChatCompletionRequestUserMessageArgs::default()
-                    .content(format!(
-                        "Complete the Rust code that follows this instruction: '{}'. Your response must start with code block '```rust'.",
-                        self.doc
+                        "Complete the following Rust source according to the instruction. Return the complete source in the code field. Do not include Markdown code fences in that field.\n\nInstruction: {}\n\nIncomplete Rust source:\n{}",
+                        self.doc, self.token_stream
                     ))
                     .build()?.into(),
             ])

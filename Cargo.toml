@@ -21,4 +21,5 @@ syn = { version = "3.0", features = ["full", "extra-traits", "parsing"] }
 proc-macro2 = { version = "1.0", features = ["nightly"] }
 quote = "1.0"
 async-openai = { version = "0.41.0", features = ["chat-completion"] }
+serde_json = "1.0"
 tokio = { version = "1.0", features = ["rt-multi-thread"] }
